@@ -195,7 +195,7 @@
         </section>
 
         <!-- 條碼區 -->
-        <section class="section">
+        <section class="section" id="resultSection">
             <h3 class="section-title">繳費條碼</h3>
             <div class="card">
                 <p class="empty" id="emptyState">填寫上方資訊後按「產生條碼」</p>
@@ -414,6 +414,10 @@
 
             document.getElementById('emptyState').hidden = true;
             document.getElementById('results').hidden = false;
+
+            // 收起手機鍵盤，並捲動到條碼區，避免在小螢幕上看不到產生結果
+            document.activeElement.blur();
+            document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     </script>
 </body>
