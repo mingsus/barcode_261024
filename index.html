@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三段式繳費條碼產生器</title>
+    <!-- 引入開源的 JsBarcode 渲染套件 -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { width: 100%; padding: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }
+        .input-row { display: flex; gap: 8px; }
+        .paste-btn { width: auto; flex-shrink: 0; padding: 8px 16px; font-size: 14px; }
+        .barcode-container { text-align: center; margin-top: 30px; }
+        svg { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>繳費條碼產生器</h2>
+    
+    <div class="input-group">
+        <label>繳費期限 (YYMMDD，例如 151231)</label>
+        <input type="text" id="deadline" maxlength="6" value="151231">
+    </div>
+    <div class="input-group">
+        <label>代收代號 (3碼，預設聯邦 C72)</label>
+        <input type="text" id="storeCode" maxlength="3" value="C72">
+    </div>
+    <div class="input-group">
+        <label>銷帳編號 (最多16碼)</label>
+        <div class="input-row">
+            <input type="text" id="accountNo" maxlength="16" value="1234567890123456">
+            <button type="button" class="paste-btn" onclick="pasteAccountNo()">貼上</button>
+        </div>
+    </div>
+    <div class="input-group">
+        <label>應繳年月 (YYMM，例如 1512)</label>
+        <input type="text" id="payDate" maxlength="4" value="1512">
+    </div>
+    <div class="input-group">
+        <label>應繳金額 (新台幣)</label>
+        <input type="number" id="amount" value="1000">
+    </div>
+
+    <button onclick="generateBarcodes()">產生條碼</button>
+
+    <div class="barcode-container">
+        <svg id="barcode1"></svg><br>
+        <svg id="barcode2"></svg><br>
+        <svg id="barcode3"></svg>
+    </div>
+
+    <script>
+        // 字母轉換數值的對應表 (A=1, B=2... I=9, J=1... Z=9)
+        function charToValue(char) {
+            if (/[0-9]/.test(char)) return parseInt(char);
+            const code = char.toUpperCase().charCodeAt(0);
+            if (code >= 65 && code <= 73) return code - 64; // A-I
+            if (code >= 74 && code <= 82) return code - 73; // J-R
+            if (code >= 83 && code <= 90) return code - 81; // S-Z
+            return 0;
+        }
+
+        function calculateCheckDigits(b1, b2, b3_placeholder) {
+            let oddSum = 0;
+            let evenSum = 0;
+
+            // 依據公版規則：每一段各自從第 1 碼起算奇偶位，三段的奇數位、偶數位再分別加總
+            // (第一段長度為 9 碼，若直接串接三段會讓第二段奇偶位錯位)
+            // 第三段的檢查碼位置 (第 5、6 碼) 以 "00" 佔位，不影響加總
+            for (const segment of [b1, b2, b3_placeholder]) {
+                for (let i = 0; i < segment.length; i++) {
+                    let val = charToValue(segment[i]);
+                    if (i % 2 === 0) oddSum += val;  // 索引偶數 = 實體第奇數碼
+                    else evenSum += val;             // 索引奇數 = 實體第偶數碼
+                }
+            }
+
+            let check1 = oddSum % 11;
+            let check2 = evenSum % 11;
+
+            // 餘數轉換規則
+            if (check1 === 0) check1 = 'A';
+            else if (check1 === 10) check1 = 'B';
+            
+            if (check2 === 0) check2 = 'X';
+            else if (check2 === 10) check2 = 'Y';
+
+            return `${check1}${check2}`;
+        }
+
+        // 從剪貼簿貼上銷帳編號，並移除空白、連字號等非英數字元
+        async function pasteAccountNo() {
+            try {
+                const text = await navigator.clipboard.readText();
+                const cleaned = text.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+                if (cleaned.length > 16) {
+                    alert(`剪貼簿內容有 ${cleaned.length} 碼，超過 16 碼上限，請確認後再貼上`);
+                    return;
+                }
+                document.getElementById('accountNo').value = cleaned;
+            } catch (err) {
+                alert('無法讀取剪貼簿，請允許瀏覽器存取剪貼簿，或手動貼上 (Ctrl+V)');
+            }
+        }
+
+        function generateBarcodes() {
+            const deadline = document.getElementById('deadline').value;
+            const storeCode = document.getElementById('storeCode').value.toUpperCase();
+            // 第二段不足 16 碼者，由位數小者 (右側) 補 0
+            const accountNo = document.getElementById('accountNo').value.toUpperCase().padEnd(16, '0');
+            const payDate = document.getElementById('payDate').value;
+            const amount = document.getElementById('amount').value.padStart(9, '0');
+
+            // 組合第一段與第二段
+            const barcode1 = deadline + storeCode;
+            const barcode2 = accountNo;
+            
+            // 第三段，檢查碼位置先以 "00" 佔位
+            const barcode3_placeholder = payDate + '00' + amount;
+
+            // 計算檢查碼
+            const checkDigits = calculateCheckDigits(barcode1, barcode2, barcode3_placeholder);
+            
+            // 完整第三段
+            const barcode3 = payDate + checkDigits + amount;
+
+            // 呼叫 JsBarcode 繪製圖片 (指定 Code39 格式)
+            const options = { format: "CODE39", height: 60, displayValue: true };
+            JsBarcode("#barcode1", barcode1, options);
+            JsBarcode("#barcode2", barcode2, options);
+            JsBarcode("#barcode3", barcode3, options);
+        }
+    </script>
+</body>
+</html>
