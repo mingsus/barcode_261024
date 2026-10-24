@@ -6,55 +6,261 @@
     <title>三段式繳費條碼產生器</title>
     <!-- 引入開源的 JsBarcode 渲染套件 -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; }
-        .input-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input { width: 100%; padding: 8px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }
+        :root {
+            --bg: #FAFAFA;
+            --card: #FFFFFF;
+            --muted: #E5E5E5;
+            --text: #1F2937;
+            --text-soft: #6B7280;
+            --text-faint: #9CA3AF;
+            --accent-from: #60A5FA;
+            --accent-to: #A855F7;
+            --accent: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+        }
+        .container { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+
+        /* 頁首 */
+        .hero { padding: 64px 0 40px; text-align: center; }
+        .orb {
+            width: 72px; height: 72px; margin: 0 auto 24px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            animation: pulse-slow 3s ease-in-out infinite;
+        }
+        .orb svg { width: 32px; height: 32px; color: #fff; }
+        @keyframes pulse-slow {
+            0%, 100% { transform: scale(1); opacity: 0.85; }
+            50% { transform: scale(1.06); opacity: 1; }
+        }
+        h1 { font-size: 30px; font-weight: 300; margin: 0 0 8px; }
+        .subtitle { color: var(--text-soft); margin: 0; }
+
+        /* 卡片與區塊標題 */
+        .section-title {
+            color: var(--text-faint);
+            font-size: 12px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            text-align: center;
+            margin: 0 0 16px;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 24px;
+            padding: 28px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        .section { margin-bottom: 48px; }
+
+        /* 輸入區 */
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .full { grid-column: 1 / -1; }
+        label { display: block; font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+        label .hint { font-weight: 400; color: var(--text-faint); font-size: 12px; margin-left: 4px; }
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            font: inherit;
+            font-size: 15px;
+            color: var(--text);
+            background: var(--bg);
+            border: 1px solid var(--muted);
+            border-radius: 12px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus { border-color: var(--accent-from); box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2); }
         .input-row { display: flex; gap: 8px; }
-        .paste-btn { width: auto; flex-shrink: 0; padding: 8px 16px; font-size: 14px; }
-        .barcode-container { text-align: center; margin-top: 30px; }
-        svg { margin-bottom: 10px; }
+
+        /* 按鈕 */
+        button { font: inherit; cursor: pointer; border: none; transition: opacity 0.2s, box-shadow 0.2s, background 0.2s; }
+        .btn-primary {
+            width: 100%;
+            margin-top: 28px;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 500;
+            color: #fff;
+            background: var(--accent);
+            border-radius: 999px;
+        }
+        .btn-primary:hover { box-shadow: 0 4px 14px rgba(168, 85, 247, 0.25); }
+        .btn-soft {
+            flex-shrink: 0;
+            padding: 8px 16px;
+            font-size: 14px;
+            color: var(--text-soft);
+            background: #F3F4F6;
+            border-radius: 999px;
+        }
+        .btn-soft:hover { background: var(--muted); color: var(--text); }
+        .btn-soft.done { color: #fff; background: var(--accent); }
+        .btn-outline {
+            width: 100%;
+            margin-top: 8px;
+            padding: 12px;
+            font-size: 15px;
+            color: var(--text-soft);
+            background: transparent;
+            border: 1px solid var(--muted);
+            border-radius: 999px;
+        }
+        .btn-outline:hover { color: var(--text); border-color: var(--text-faint); }
+
+        /* 條碼區 */
+        .empty { text-align: center; color: var(--text-faint); font-size: 14px; padding: 24px 0; }
+        .barcode-item { padding: 20px 0; border-bottom: 1px solid #F3F4F6; }
+        .barcode-item:first-child { padding-top: 0; }
+        .barcode-item:last-of-type { border-bottom: none; }
+        .barcode-label { font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; margin-bottom: 8px; }
+        .barcode-item svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+        .barcode-value {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            margin-top: 8px;
+        }
+        .barcode-value code {
+            font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+            font-size: 16px;
+            letter-spacing: 0.05em;
+            word-break: break-all;
+        }
+
+        footer { text-align: center; color: var(--text-faint); font-size: 13px; padding: 0 0 40px; }
+
+        @media (max-width: 480px) {
+            .hero { padding: 40px 0 28px; }
+            .card { padding: 20px; }
+            .grid { grid-template-columns: 1fr; gap: 16px; }
+        }
     </style>
 </head>
 <body>
+    <div class="container">
+        <header class="hero">
+            <div class="orb">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-width="2" d="M4 6v12M7 6v12M10 6v12M14 6v12M16 6v12M20 6v12"/>
+                </svg>
+            </div>
+            <h1>繳費條碼產生器</h1>
+            <p class="subtitle">輸入帳單資訊，產生超商三段式繳費條碼</p>
+        </header>
 
-    <h2>繳費條碼產生器</h2>
-    
-    <div class="input-group">
-        <label>繳費期限 (YYMMDD，例如 151231)</label>
-        <input type="text" id="deadline" maxlength="6" value="151231">
-    </div>
-    <div class="input-group">
-        <label>代收代號 (3碼，預設聯邦 C72)</label>
-        <input type="text" id="storeCode" maxlength="3" value="C72">
-    </div>
-    <div class="input-group">
-        <label>銷帳編號 (最多16碼)</label>
-        <div class="input-row">
-            <input type="text" id="accountNo" maxlength="16" value="1234567890123456">
-            <button type="button" class="paste-btn" onclick="pasteAccountNo()">貼上</button>
-        </div>
-    </div>
-    <div class="input-group">
-        <label>應繳年月 (YYMM，例如 1512)</label>
-        <input type="text" id="payDate" maxlength="4" value="1512">
-    </div>
-    <div class="input-group">
-        <label>應繳金額 (新台幣)</label>
-        <input type="number" id="amount" value="1000">
-    </div>
+        <!-- 輸入區 -->
+        <section class="section">
+            <h3 class="section-title">帳單資訊</h3>
+            <form class="card" onsubmit="event.preventDefault(); generateBarcodes();">
+                <div class="grid">
+                    <div>
+                        <label for="deadline">繳費期限<span class="hint">YYMMDD</span></label>
+                        <input type="text" id="deadline" maxlength="6" value="151231" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="storeCode">代收代號<span class="hint">3碼，預設聯邦</span></label>
+                        <input type="text" id="storeCode" maxlength="3" value="C72">
+                    </div>
+                    <div class="full">
+                        <label for="accountNo">銷帳編號<span class="hint">最多16碼</span></label>
+                        <div class="input-row">
+                            <input type="text" id="accountNo" maxlength="16" value="1234567890123456">
+                            <button type="button" class="btn-soft" onclick="pasteAccountNo()">貼上</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="payDate">應繳年月<span class="hint">YYMM</span></label>
+                        <input type="text" id="payDate" maxlength="4" value="1512" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="amount">應繳金額<span class="hint">新台幣</span></label>
+                        <input type="number" id="amount" value="1000" inputmode="numeric">
+                    </div>
+                    <div class="full">
+                        <label for="barcodeName">條碼名稱<span class="hint">選填，留空則自動產生；會顯示在圖片上並作為檔名</span></label>
+                        <input type="text" id="barcodeName" maxlength="40">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary">產生條碼</button>
+            </form>
+        </section>
 
-    <button onclick="generateBarcodes()">產生條碼</button>
+        <!-- 條碼區 -->
+        <section class="section">
+            <h3 class="section-title">繳費條碼</h3>
+            <div class="card">
+                <p class="empty" id="emptyState">填寫上方資訊後按「產生條碼」</p>
+                <div id="results" hidden>
+                    <div class="barcode-item">
+                        <div class="barcode-label">條碼一</div>
+                        <svg id="barcode1"></svg>
+                        <div class="barcode-value">
+                            <code id="value1"></code>
+                            <button type="button" class="btn-soft" onclick="copyValue(this, 1)">複製</button>
+                        </div>
+                    </div>
+                    <div class="barcode-item">
+                        <div class="barcode-label">條碼二</div>
+                        <svg id="barcode2"></svg>
+                        <div class="barcode-value">
+                            <code id="value2"></code>
+                            <button type="button" class="btn-soft" onclick="copyValue(this, 2)">複製</button>
+                        </div>
+                    </div>
+                    <div class="barcode-item">
+                        <div class="barcode-label">條碼三</div>
+                        <svg id="barcode3"></svg>
+                        <div class="barcode-value">
+                            <code id="value3"></code>
+                            <button type="button" class="btn-soft" onclick="copyValue(this, 3)">複製</button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-outline" onclick="saveImage()">另存成圖片</button>
+                </div>
+            </div>
+        </section>
 
-    <div class="barcode-container">
-        <svg id="barcode1"></svg><br>
-        <svg id="barcode2"></svg><br>
-        <svg id="barcode3"></svg>
+        <footer>所有資料僅在瀏覽器中計算，不會上傳到任何地方</footer>
     </div>
 
     <script>
+        // 目前產生的三段條碼內容，供複製與存圖使用
+        let currentBarcodes = [];
+
+        // 代收代號對應的名稱，用於自動產生條碼名稱
+        const STORE_NAMES = {
+            'C72': '聯邦信用卡費',
+        };
+
+        // 依代收代號與應繳年月自動產生條碼名稱，例如「聯邦信用卡費_2026年12月」
+        // 應繳年月的 YY 為民國年後兩碼 (15 = 民國 115 年)，換算西元年 = 2011 + YY
+        function autoName() {
+            const storeCode = document.getElementById('storeCode').value.trim().toUpperCase();
+            const payDate = document.getElementById('payDate').value.trim();
+            const store = STORE_NAMES[storeCode] || storeCode;
+            const period = /^\d{4}$/.test(payDate)
+                ? `${2011 + parseInt(payDate.slice(0, 2), 10)}年${payDate.slice(2)}月`
+                : payDate;
+            return [store, period].filter(Boolean).join('_') || '繳費條碼';
+        }
+
+        // 讓條碼名稱欄位的提示文字即時顯示自動產生的名稱
+        function updateNamePlaceholder() {
+            document.getElementById('barcodeName').placeholder = autoName();
+        }
+        ['storeCode', 'payDate'].forEach(id =>
+            document.getElementById(id).addEventListener('input', updateNamePlaceholder));
+        updateNamePlaceholder();
+
         // 字母轉換數值的對應表 (A=1, B=2... I=9, J=1... Z=9)
         function charToValue(char) {
             if (/[0-9]/.test(char)) return parseInt(char);
@@ -86,7 +292,7 @@
             // 餘數轉換規則
             if (check1 === 0) check1 = 'A';
             else if (check1 === 10) check1 = 'B';
-            
+
             if (check2 === 0) check2 = 'X';
             else if (check2 === 10) check2 = 'Y';
 
@@ -108,6 +314,74 @@
             }
         }
 
+        // 複製某一段條碼的數字，按鈕短暫顯示「已複製」
+        async function copyValue(button, index) {
+            try {
+                await navigator.clipboard.writeText(currentBarcodes[index - 1]);
+                button.textContent = '已複製';
+                button.classList.add('done');
+                setTimeout(() => {
+                    button.textContent = '複製';
+                    button.classList.remove('done');
+                }, 1500);
+            } catch (err) {
+                alert('無法寫入剪貼簿，請手動選取文字複製');
+            }
+        }
+
+        // 將三段條碼 (含數字) 合成一張 PNG 下載
+        function saveImage() {
+            const padding = 32;
+            const labelHeight = 28;
+            const gap = 24;
+            const labels = ['條碼一', '條碼二', '條碼三'];
+            const name = document.getElementById('barcodeName').value.trim() || autoName();
+            const titleHeight = 48;
+
+            // 先把每段條碼各自畫到獨立的 canvas
+            const parts = currentBarcodes.map(value => {
+                const canvas = document.createElement('canvas');
+                JsBarcode(canvas, value, {
+                    format: "CODE39", width: 2, height: 80, displayValue: true,
+                    font: "monospace", fontSize: 18, margin: 0, background: "#ffffff"
+                });
+                return canvas;
+            });
+
+            const width = Math.max(...parts.map(c => c.width)) + padding * 2;
+            const height = padding * 2 + titleHeight
+                + parts.reduce((sum, c) => sum + labelHeight + c.height, 0)
+                + gap * (parts.length - 1);
+
+            const output = document.createElement('canvas');
+            output.width = width;
+            output.height = height;
+            const ctx = output.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+
+            let y = padding;
+            // 在圖片最上方印出條碼名稱
+            ctx.fillStyle = '#1F2937';
+            ctx.font = '600 24px sans-serif';
+            ctx.fillText(name, padding, y + 24, width - padding * 2);
+            y += titleHeight;
+            parts.forEach((canvas, i) => {
+                ctx.fillStyle = '#9CA3AF';
+                ctx.font = '14px sans-serif';
+                ctx.fillText(labels[i], padding, y + 16);
+                y += labelHeight;
+                ctx.drawImage(canvas, padding, y);
+                y += canvas.height + gap;
+            });
+
+            const link = document.createElement('a');
+            // 檔名使用條碼名稱，並將空白與 Windows 檔名不允許的字元換成底線
+            link.download = `${name.replace(/[\s\\/:*?"<>|]+/g, '_')}.png`;
+            link.href = output.toDataURL('image/png');
+            link.click();
+        }
+
         function generateBarcodes() {
             const deadline = document.getElementById('deadline').value;
             const storeCode = document.getElementById('storeCode').value.toUpperCase();
@@ -119,21 +393,27 @@
             // 組合第一段與第二段
             const barcode1 = deadline + storeCode;
             const barcode2 = accountNo;
-            
+
             // 第三段，檢查碼位置先以 "00" 佔位
             const barcode3_placeholder = payDate + '00' + amount;
 
             // 計算檢查碼
             const checkDigits = calculateCheckDigits(barcode1, barcode2, barcode3_placeholder);
-            
+
             // 完整第三段
             const barcode3 = payDate + checkDigits + amount;
 
-            // 呼叫 JsBarcode 繪製圖片 (指定 Code39 格式)
-            const options = { format: "CODE39", height: 60, displayValue: true };
-            JsBarcode("#barcode1", barcode1, options);
-            JsBarcode("#barcode2", barcode2, options);
-            JsBarcode("#barcode3", barcode3, options);
+            currentBarcodes = [barcode1, barcode2, barcode3];
+
+            // 呼叫 JsBarcode 繪製圖片 (指定 Code39 格式)，數字另外顯示在複製按鈕旁
+            const options = { format: "CODE39", height: 60, displayValue: false, margin: 0 };
+            currentBarcodes.forEach((value, i) => {
+                JsBarcode(`#barcode${i + 1}`, value, options);
+                document.getElementById(`value${i + 1}`).textContent = value;
+            });
+
+            document.getElementById('emptyState').hidden = true;
+            document.getElementById('results').hidden = false;
         }
     </script>
 </body>
