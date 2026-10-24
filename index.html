@@ -94,6 +94,31 @@
             padding: 8px 12px;
             margin: 8px 0 0;
         }
+        /* 簡易／自訂模式切換 */
+        .mode-switch { display: flex; padding: 4px; margin-bottom: 24px; background: #F3F4F6; border-radius: 999px; }
+        .mode-switch button {
+            flex: 1;
+            padding: 8px;
+            font-size: 14px;
+            color: var(--text-soft);
+            background: transparent;
+            border-radius: 999px;
+        }
+        .mode-switch button.active { color: var(--text); font-weight: 500; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+        .simple-only { display: none; }
+        .mode-simple .simple-only { display: block; }
+        .mode-simple .custom-only { display: none; }
+        .mode-simple .amount-field { grid-column: 1 / -1; }
+        .auto-summary { flex-wrap: wrap; gap: 8px; }
+        .mode-simple .auto-summary { display: flex; }
+        .auto-summary span {
+            padding: 4px 12px;
+            font-size: 12px;
+            color: var(--text-faint);
+            background: var(--bg);
+            border-radius: 999px;
+        }
+        .auto-summary b { margin-left: 6px; font-weight: 500; color: var(--text-soft); }
         .badge-optional {
             display: inline-block;
             margin-left: 6px;
@@ -146,7 +171,11 @@
         .barcode-item { padding: 20px 0; border-bottom: 1px solid #F3F4F6; }
         .barcode-item:first-child { padding-top: 0; }
         .barcode-item:last-of-type { border-bottom: none; }
-        .barcode-label { font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; margin-bottom: 8px; }
+        .barcode-label {
+            display: flex; justify-content: space-between; align-items: baseline;
+            font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; margin-bottom: 8px;
+        }
+        .amount-tag { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: 0; }
         .barcode-item svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
         .barcode-value {
             display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -183,15 +212,19 @@
         <!-- 輸入區 -->
         <section class="section">
             <h3 class="section-title">帳單資訊</h3>
-            <form class="card" onsubmit="event.preventDefault(); generateBarcodes();">
+            <form class="card mode-simple" id="billForm" onsubmit="event.preventDefault(); generateBarcodes();">
+                <div class="mode-switch">
+                    <button type="button" data-mode="simple" class="active" onclick="setMode('simple')">聯邦 C72</button>
+                    <button type="button" data-mode="custom" onclick="setMode('custom')">自訂</button>
+                </div>
                 <div class="grid">
-                    <div>
+                    <div class="custom-only">
                         <label for="deadline">繳費期限<span class="hint">民國 YYMMDD</span></label>
                         <input type="text" id="deadline" maxlength="6" value="151231" inputmode="numeric">
                         <p class="field-note">例：115年12月31日 填 151231</p>
                         <p class="field-error" id="deadlineError" hidden></p>
                     </div>
-                    <div>
+                    <div class="custom-only">
                         <label for="storeCode">代收代號<span class="hint">3碼，預設聯邦</span></label>
                         <input type="text" id="storeCode" maxlength="3" value="C72">
                     </div>
@@ -203,16 +236,20 @@
                         </div>
                         <p class="field-warning">⚠ 請逐碼核對帳單上的銷帳編號，填錯將導致款項無法入帳</p>
                     </div>
-                    <div>
+                    <div class="custom-only">
                         <label for="payDate">應繳年月<span class="hint">民國 YYMM</span></label>
                         <input type="text" id="payDate" maxlength="4" value="1512" inputmode="numeric">
                         <p class="field-note">例：115年12月 填 1512</p>
                     </div>
-                    <div>
+                    <div class="amount-field">
                         <label for="amount">應繳金額<span class="hint">新台幣</span></label>
                         <input type="number" id="amount" value="1000" inputmode="numeric">
                     </div>
-                    <div class="full">
+                    <div class="full simple-only auto-summary">
+                        <span>繳費期限<b id="autoDeadline"></b></span>
+                        <span>應繳年月<b id="autoPayDate"></b></span>
+                    </div>
+                    <div class="full custom-only">
                         <label for="barcodeName">條碼名稱<span class="badge-optional">選填</span></label>
                         <input type="text" id="barcodeName" maxlength="40">
                         <p class="field-note">留空則自動產生，會顯示在圖片上並作為檔名</p>
@@ -229,7 +266,7 @@
                 <p class="empty" id="emptyState">填寫上方資訊後按「產生條碼」</p>
                 <div id="results" hidden>
                     <div class="barcode-item">
-                        <div class="barcode-label">條碼一</div>
+                        <div class="barcode-label">條碼一<span class="amount-tag" id="infoTag"></span></div>
                         <svg id="barcode1"></svg>
                         <div class="barcode-value">
                             <code id="value1"></code>
@@ -245,7 +282,7 @@
                         </div>
                     </div>
                     <div class="barcode-item">
-                        <div class="barcode-label">條碼三</div>
+                        <div class="barcode-label">條碼三<span class="amount-tag" id="amountTag"></span></div>
                         <svg id="barcode3"></svg>
                         <div class="barcode-value">
                             <code id="value3"></code>
@@ -263,6 +300,17 @@
     <script>
         // 目前產生的三段條碼內容，供複製與存圖使用
         let currentBarcodes = [];
+
+        // 從第一段條碼取出代收代號與繳費期限，格式化為「C72・期限 2026/12/31」
+        function formatBarcode1(barcode1) {
+            const year = rocToYear(barcode1.slice(0, 2));
+            return `${barcode1.slice(6)}・期限 ${year}/${barcode1.slice(2, 4)}/${barcode1.slice(4, 6)}`;
+        }
+
+        // 從第三段條碼末 9 碼取出金額，格式化為「NT$ 1,000」
+        function formatAmount(barcode3) {
+            return `NT$ ${parseInt(barcode3.slice(6), 10).toLocaleString('zh-TW')}`;
+        }
 
         // 代收代號對應的名稱，用於自動產生條碼名稱
         const STORE_NAMES = {
@@ -324,6 +372,35 @@
         }
         document.getElementById('deadline').addEventListener('input', checkDeadline);
         checkDeadline();
+
+        // 簡易模式：繳費期限取當年 12/31、代收代號 C72、應繳年月取當年當月
+        function applySimpleDefaults() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const yy = String(year - 2011).padStart(2, '0');
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+
+            document.getElementById('deadline').value = `${yy}1231`;
+            document.getElementById('storeCode').value = 'C72';
+            document.getElementById('payDate').value = `${yy}${mm}`;
+            document.getElementById('autoDeadline').textContent = `${year}/12/31`;
+            document.getElementById('autoPayDate').textContent = `${year}/${mm}`;
+
+            updateNamePlaceholder();
+            checkDeadline();
+        }
+
+        let currentMode = 'simple';
+
+        // 切換簡易／自訂模式；切到自訂時沿用目前的自動帶入值作為起點
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('billForm').classList.toggle('mode-simple', mode === 'simple');
+            document.querySelectorAll('.mode-switch button').forEach(button =>
+                button.classList.toggle('active', button.dataset.mode === mode));
+            if (mode === 'simple') applySimpleDefaults();
+        }
+        setMode('simple');
 
         // 字母轉換數值的對應表 (A=1, B=2... I=9, J=1... Z=9)
         function charToValue(char) {
@@ -399,7 +476,10 @@
             const labelHeight = 28;
             const gap = 24;
             const labels = ['條碼一', '條碼二', '條碼三'];
-            const name = document.getElementById('barcodeName').value.trim() || autoName();
+            const tags = [formatBarcode1(currentBarcodes[0]), '', formatAmount(currentBarcodes[2])];
+            // 條碼名稱欄位只在自訂模式顯示，聯邦 C72 模式一律使用自動產生的名稱
+            const customName = currentMode === 'custom' ? document.getElementById('barcodeName').value.trim() : '';
+            const name = customName || autoName();
             const titleHeight = 48;
 
             // 先把每段條碼各自畫到獨立的 canvas
@@ -434,6 +514,14 @@
                 ctx.fillStyle = '#9CA3AF';
                 ctx.font = '14px sans-serif';
                 ctx.fillText(labels[i], padding, y + 16);
+                // 條碼一、條碼三的標示右側分別印出代號期限與金額
+                if (tags[i]) {
+                    ctx.fillStyle = '#1F2937';
+                    ctx.font = '600 16px sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(tags[i], width - padding, y + 16);
+                    ctx.textAlign = 'left';
+                }
                 y += labelHeight;
                 ctx.drawImage(canvas, padding, y);
                 y += canvas.height + gap;
@@ -447,6 +535,9 @@
         }
 
         function generateBarcodes() {
+            // 簡易模式每次產生前重新帶入，避免頁面跨日或跨月開著時日期過舊
+            if (currentMode === 'simple') applySimpleDefaults();
+
             // 繳費期限有誤或已過期時不產生條碼，並跳回該欄位
             if (!checkDeadline()) {
                 document.getElementById('deadline').focus();
@@ -481,6 +572,9 @@
                 JsBarcode(`#barcode${i + 1}`, value, options);
                 document.getElementById(`value${i + 1}`).textContent = value;
             });
+
+            document.getElementById('infoTag').textContent = formatBarcode1(barcode1);
+            document.getElementById('amountTag').textContent = formatAmount(barcode3);
 
             document.getElementById('emptyState').hidden = true;
             document.getElementById('results').hidden = false;
