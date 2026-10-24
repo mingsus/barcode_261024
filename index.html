@@ -81,7 +81,30 @@
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         input:focus { border-color: var(--accent-from); box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2); }
+        input.invalid { border-color: #F87171; }
+        input.invalid:focus { box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2); }
         .input-row { display: flex; gap: 8px; }
+        .field-note { font-size: 12px; color: var(--text-faint); margin: 6px 0 0; }
+        .field-error { font-size: 12px; color: #DC2626; margin: 6px 0 0; }
+        .field-warning {
+            font-size: 13px;
+            color: #B45309;
+            background: #FFFBEB;
+            border-radius: 10px;
+            padding: 8px 12px;
+            margin: 8px 0 0;
+        }
+        .badge-optional {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 8px;
+            font-size: 11px;
+            font-weight: 500;
+            color: #fff;
+            background: var(--accent);
+            border-radius: 999px;
+            vertical-align: 1px;
+        }
 
         /* 按鈕 */
         button { font: inherit; cursor: pointer; border: none; transition: opacity 0.2s, box-shadow 0.2s, background 0.2s; }
@@ -163,8 +186,10 @@
             <form class="card" onsubmit="event.preventDefault(); generateBarcodes();">
                 <div class="grid">
                     <div>
-                        <label for="deadline">繳費期限<span class="hint">YYMMDD</span></label>
+                        <label for="deadline">繳費期限<span class="hint">民國 YYMMDD</span></label>
                         <input type="text" id="deadline" maxlength="6" value="151231" inputmode="numeric">
+                        <p class="field-note">例：115年12月31日 填 151231</p>
+                        <p class="field-error" id="deadlineError" hidden></p>
                     </div>
                     <div>
                         <label for="storeCode">代收代號<span class="hint">3碼，預設聯邦</span></label>
@@ -176,18 +201,21 @@
                             <input type="text" id="accountNo" maxlength="16" value="1234567890123456">
                             <button type="button" class="btn-soft" onclick="pasteAccountNo()">貼上</button>
                         </div>
+                        <p class="field-warning">⚠ 請逐碼核對帳單上的銷帳編號，填錯將導致款項無法入帳</p>
                     </div>
                     <div>
-                        <label for="payDate">應繳年月<span class="hint">YYMM</span></label>
+                        <label for="payDate">應繳年月<span class="hint">民國 YYMM</span></label>
                         <input type="text" id="payDate" maxlength="4" value="1512" inputmode="numeric">
+                        <p class="field-note">例：115年12月 填 1512</p>
                     </div>
                     <div>
                         <label for="amount">應繳金額<span class="hint">新台幣</span></label>
                         <input type="number" id="amount" value="1000" inputmode="numeric">
                     </div>
                     <div class="full">
-                        <label for="barcodeName">條碼名稱<span class="hint">選填，留空則自動產生；會顯示在圖片上並作為檔名</span></label>
+                        <label for="barcodeName">條碼名稱<span class="badge-optional">選填</span></label>
                         <input type="text" id="barcodeName" maxlength="40">
+                        <p class="field-note">留空則自動產生，會顯示在圖片上並作為檔名</p>
                     </div>
                 </div>
                 <button type="submit" class="btn-primary">產生條碼</button>
@@ -241,14 +269,18 @@
             'C72': '聯邦信用卡費',
         };
 
+        // 條碼中的 YY 為民國年後兩碼 (15 = 民國 115 年)，換算西元年 = 2011 + YY
+        function rocToYear(yy) {
+            return 2011 + parseInt(yy, 10);
+        }
+
         // 依代收代號與應繳年月自動產生條碼名稱，例如「聯邦信用卡費_2026年12月」
-        // 應繳年月的 YY 為民國年後兩碼 (15 = 民國 115 年)，換算西元年 = 2011 + YY
         function autoName() {
             const storeCode = document.getElementById('storeCode').value.trim().toUpperCase();
             const payDate = document.getElementById('payDate').value.trim();
             const store = STORE_NAMES[storeCode] || storeCode;
             const period = /^\d{4}$/.test(payDate)
-                ? `${2011 + parseInt(payDate.slice(0, 2), 10)}年${payDate.slice(2)}月`
+                ? `${rocToYear(payDate.slice(0, 2))}年${payDate.slice(2)}月`
                 : payDate;
             return [store, period].filter(Boolean).join('_') || '繳費條碼';
         }
@@ -260,6 +292,38 @@
         ['storeCode', 'payDate'].forEach(id =>
             document.getElementById(id).addEventListener('input', updateNamePlaceholder));
         updateNamePlaceholder();
+
+        // 檢查繳費期限：須為 6 碼數字、日期存在，且不得早於今天 (當天到期仍可繳)
+        function checkDeadline() {
+            const input = document.getElementById('deadline');
+            const errorEl = document.getElementById('deadlineError');
+            const value = input.value.trim();
+            let message = '';
+
+            if (!/^\d{6}$/.test(value)) {
+                message = '請輸入 6 碼數字 (民國年後兩碼 + 月 + 日)';
+            } else {
+                const year = rocToYear(value.slice(0, 2));
+                const month = parseInt(value.slice(2, 4), 10);
+                const day = parseInt(value.slice(4), 10);
+                const date = new Date(year, month - 1, day);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                if (date.getMonth() !== month - 1 || date.getDate() !== day) {
+                    message = '日期不存在，請確認月份與日期';
+                } else if (date < today) {
+                    message = `繳費期限 ${year}/${month}/${day} 已過，超商將無法收款`;
+                }
+            }
+
+            errorEl.textContent = message;
+            errorEl.hidden = !message;
+            input.classList.toggle('invalid', !!message);
+            return !message;
+        }
+        document.getElementById('deadline').addEventListener('input', checkDeadline);
+        checkDeadline();
 
         // 字母轉換數值的對應表 (A=1, B=2... I=9, J=1... Z=9)
         function charToValue(char) {
@@ -383,6 +447,12 @@
         }
 
         function generateBarcodes() {
+            // 繳費期限有誤或已過期時不產生條碼，並跳回該欄位
+            if (!checkDeadline()) {
+                document.getElementById('deadline').focus();
+                return;
+            }
+
             const deadline = document.getElementById('deadline').value;
             const storeCode = document.getElementById('storeCode').value.toUpperCase();
             // 第二段不足 16 碼者，由位數小者 (右側) 補 0
